@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Web App Design for Live Synchronized Visuals</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 40px auto;
+      max-width: 800px;
+      line-height: 1.6;
+      color: #333;
+    }
+    h1, h2, h3 {
+      color: #2c3e50;
+    }
+    code {
+      background: #f4f4f4;
+      padding: 2px 4px;
+      font-family: "Courier New", Courier, monospace;
+    }
+    pre {
+      background: #f4f4f4;
+      padding: 10px;
+      overflow: auto;
+      font-family: "Courier New", Courier, monospace;
+    }
+    hr {
+      margin: 30px 0;
+    }
+  </style>
+</head>
+<body>
+
+<h1>Web App Design for Live Synchronized Visuals</h1>
+<hr />
+
+<h2>Table of Contents</h2>
+<ol>
+  <li><a href="#introduction">Introduction</a></li>
+  <li><a href="#system-overview">System Overview</a></li>
+  <li><a href="#detailed-architecture">Detailed Architecture</a>
+    <ol>
+      <li><a href="#1-ableton-live-to-bridge">Ableton Live to Bridge</a></li>
+      <li><a href="#2-bridge-to-cloud-server">Bridge to Cloud Server</a></li>
+      <li><a href="#3-cloud-server-to-phones">Cloud Server to Phones</a></li>
+      <li><a href="#4-mobile-web-app">Mobile Web App</a></li>
+    </ol>
+  </li>
+  <li><a href="#equipment--cost-estimates">Equipment &amp; Cost Estimates</a>
+    <ol>
+      <li><a href="#1-ableton--midi-setup">Ableton &amp; MIDI Setup</a></li>
+      <li><a href="#2-network--cloud-server">Network &amp; Cloud Server</a></li>
+      <li><a href="#3-development-costs">Development Costs</a></li>
+    </ol>
+  </li>
+  <li><a href="#synchronization-strategy">Synchronization Strategy</a></li>
+  <li><a href="#challenges--potential-solutions">Challenges &amp; Potential Solutions</a></li>
+  <li><a href="#next-steps">Next Steps</a></li>
+</ol>
+
+<hr />
+
+<h2 id="introduction">1. Introduction</h2>
+<p>
+This document outlines a system that allows an audience (approximately 100–500 people) 
+to scan a QR code and open a web app on their phones. The web app then displays color 
+changes that are synchronized to music played in Ableton Live, aiming for near-1/16th-note 
+accuracy. The solution uses a cloud-based server, a local script to bridge Ableton’s MIDI output, 
+and a simple browser-based client on the audience’s phones.
+</p>
+
+<hr />
+
+<h2 id="system-overview">2. System Overview</h2>
+<ol>
+  <li><strong>Ableton Live</strong> generates music and outputs MIDI or control signals at precise beats or measures.</li>
+  <li>A <strong>Local Bridge Script</strong> (running on the same computer or a dedicated machine) interprets Ableton’s MIDI messages and relays them to a cloud server.</li>
+  <li>A <strong>Cloud Server</strong> handles real-time communication (using WebSockets) with the audience’s devices.</li>
+  <li><strong>Audience Members</strong> connect to the web app by scanning a QR code. Their phones receive timing data and color-change commands in real time.</li>
+</ol>
+<p>
+The result is a synchronized light show on each audience member’s phone screen, matching the 
+beat of your performance.
+</p>
+
+<hr />
+
+<h2 id="detailed-architecture">3. Detailed Architecture</h2>
+
+<h3 id="1-ableton-live-to-bridge">1. Ableton Live to Bridge</h3>
+<ul>
+  <li><strong>Purpose</strong>: Convert MIDI cues in Ableton into network-ready messages.</li>
+  <li><strong>Implementation</strong>:
+    <ul>
+      <li>Create a dedicated MIDI track or use a Max for Live device that sends MIDI note/CC events on specific beats (including 1/16th notes if desired).</li>
+      <li>Use rtpMIDI (Windows) or Network MIDI (macOS) to route MIDI data to a local script.</li>
+    </ul>
+  </li>
+</ul>
+
+<h3 id="2-bridge-to-cloud-server">2. Bridge to Cloud Server</h3>
+<ul>
+  <li><strong>Local Script</strong>:
+    <ul>
+      <li>A small Node.js or Python application that runs continuously and listens for incoming MIDI events from Ableton.</li>
+      <li>Each incoming MIDI event is translated into a JSON message, for example:
+        <pre>{
+  "eventType": "COLOR_CHANGE",
+  "timestamp": 1671234567.95,
+  "color": "#FF0000"
+}</pre>
+      </li>
+      <li>Sends these messages to the cloud server via a WebSocket or REST endpoint.</li>
+    </ul>
+  </li>
+</ul>
+
+<h3 id="3-cloud-server-to-phones">3. Cloud Server to Phones</h3>
+<ul>
+  <li><strong>Cloud Server</strong>:
+    <ul>
+      <li>Maintains a list of connected WebSocket clients (audience phones).</li>
+      <li>When it receives a color-change command, it forwards that event to all connected clients.</li>
+      <li>Periodically shares a “master clock” so devices can measure network round-trip and calculate offsets.</li>
+    </ul>
+  </li>
+</ul>
+
+<h3 id="4-mobile-web-app">4. Mobile Web App</h3>
+<ol>
+  <li><strong>Access via QR Code</strong>  
+    <ul>
+      <li>A large QR code displayed at the event or on promotional materials points to <code>https://your-domain/session</code>.</li>
+    </ul>
+  </li>
+  <li><strong>Connection</strong>
+    <ul>
+      <li>Once loaded, the web app opens a WebSocket connection to the server.</li>
+      <li>It performs a time-sync handshake to calculate latency and offset.</li>
+    </ul>
+  </li>
+  <li><strong>Scheduling</strong>
+    <ul>
+      <li>When the phone receives a color-change command, it schedules the color change at the precise future moment based on the server’s timestamp minus the offset.</li>
+    </ul>
+  </li>
+  <li><strong>Visuals</strong>
+    <ul>
+      <li>Since only colors are required, the web app can simply set <code>document.body.style.backgroundColor</code> or use CSS transitions/animations for strobe/pulsing effects.</li>
+    </ul>
+  </li>
+</ol>
+
+<hr />
+
+<h2 id="equipment--cost-estimates">4. Equipment &amp; Cost Estimates</h2>
+
+<h3 id="1-ableton--midi-setup">1. Ableton &amp; MIDI Setup</h3>
+<ul>
+  <li><strong>Ableton Live</strong>: Already in use.</li>
+  <li><strong>MIDI Interface</strong>: If needed, a USB MIDI interface costs ~\$50–\$150, although you might rely on virtual/Network MIDI.</li>
+  <li><strong>Max for Live / Custom Script</strong>: If you need advanced control (like automatically firing events every beat or sub-beat), you may develop or purchase a Max for Live plugin (cost varies).</li>
+</ul>
+
+<h3 id="2-network--cloud-server">2. Network &amp; Cloud Server</h3>
+<ul>
+  <li><strong>Cloud Server (AWS, DigitalOcean, etc.)</strong>: ~\$10–\$20/month for a small instance that can handle 100–500 concurrent users.</li>
+  <li><strong>Domain &amp; SSL</strong>: A domain name (~\$10–\$15/year) plus free SSL via Let’s Encrypt.</li>
+  <li><strong>Internet/Wi-Fi for Users</strong>:
+    <ul>
+      <li>Many audience members will use cellular data. If you want to provide a dedicated Wi-Fi network to improve reliability, consider an enterprise-grade router (\$100–\$500 range).</li>
+    </ul>
+  </li>
+</ul>
+
+<h3 id="3-development-costs">3. Development Costs</h3>
+<ul>
+  <li><strong>Local Script &amp; Web App</strong>: Could be a DIY project if you have the development skills.</li>
+  <li><strong>Hiring a Developer</strong>: Depending on scope and complexity, a professional build-out might range from \$2,000 (basic) to \$10,000+ (polished features, testing, etc.).</li>
+</ul>
+
+<hr />
+
+<h2 id="synchronization-strategy">5. Synchronization Strategy</h2>
+<ol>
+  <li><strong>Time Offset Calculation</strong>  
+    <ul>
+      <li>Each phone pings the server, measures round-trip latency, and calculates the server–phone clock difference.</li>
+    </ul>
+  </li>
+  <li><strong>Timestamped Events</strong>
+    <ul>
+      <li>When the server sends an event, it includes a “target time” for the color change.</li>
+    </ul>
+  </li>
+  <li><strong>Local Scheduling</strong>
+    <ul>
+      <li>The phone receives the event in advance, waits until the exact local time that corresponds to the server time, and applies the color change.</li>
+    </ul>
+  </li>
+  <li><strong>Drift Correction</strong>
+    <ul>
+      <li>The phone re-checks offset periodically to correct for changes in network latency.</li>
+    </ul>
+  </li>
+</ol>
+<p>
+This approach allows near-1/16th-note accuracy, acknowledging that real-world internet or cellular 
+variability can introduce a small jitter (e.g., ±20–50 ms).
+</p>
+
+<hr />
+
+<h2 id="challenges--potential-solutions">6. Challenges &amp; Potential Solutions</h2>
+<ul>
+  <li><strong>Internet Latency and Jitter</strong>: Minimized by local scheduling on each phone and frequent offset recalculations.</li>
+  <li><strong>Network Congestion</strong>: Offer a reliable venue Wi-Fi if possible, or encourage good cellular coverage.</li>
+  <li><strong>Battery Drain &amp; Screen Management</strong>: Phones must stay active. A gentle reminder for the audience to keep brightness up can help.</li>
+  <li><strong>Browser Compatibility</strong>: Test on iOS Safari and Android Chrome. Keep the web app lightweight (HTML/CSS/JS only).</li>
+  <li><strong>User Engagement</strong>: Provide clear instructions (e.g., “Scan the code to join the light show!”) and possibly show them a short message confirming they’re connected.</li>
+</ul>
+
+<hr />
+
+<h2 id="next-steps">7. Next Steps</h2>
+<ol>
+  <li><strong>Finalize MIDI Cue Strategy</strong>: Decide how often you’ll trigger color changes (every bar, half bar, 1/16th notes, etc.).</li>
+  <li><strong>Develop or Commission the Local Bridge Script</strong>: Handle incoming MIDI and forward events to the server.</li>
+  <li><strong>Set Up Cloud Server</strong>: Choose your hosting provider, install Node.js, and implement a WebSocket-based real-time server.</li>
+  <li><strong>Build the Mobile Web App</strong>: Create a minimal HTML/JS client that connects to your server, handles time offset calculation, and updates the background color.</li>
+  <li><strong>Test in a Controlled Environment</strong>: Use a small group of devices to ensure synchronization is acceptable.</li>
+  <li><strong>Configure Live Show</strong>: Print or display the QR code at the venue, finalize the script to run in tandem with your Ableton performance, and do a rehearsal run.</li>
+</ol>
+
+<p>
+With this plan in place, you can deliver synchronized, beat-accurate color changes on audience phones 
+during your shows, all driven by your Ableton Live setup.
+</p>
+
+</body>
+</html>
